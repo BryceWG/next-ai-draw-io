@@ -11,7 +11,6 @@ import {
 } from "@/components/ui/resizable"
 import { useDiagram } from "@/contexts/diagram-context"
 import { i18n, type Locale } from "@/lib/i18n/config"
-import { isIndexedDBUsable } from "@/lib/session-storage"
 
 export default function Home() {
     const {
@@ -84,11 +83,8 @@ export default function Home() {
             setDrawioBaseUrl(`${window.location.origin}/drawio/index.html`)
         }
 
-        void (async () => {
-            const usable = await isIndexedDBUsable()
-            setCanPersist(usable)
-            setCanPersistChecked(true)
-        })()
+        setCanPersist(true)
+        setCanPersistChecked(true)
         setIsLoaded(true)
     }, [pathname, router])
 

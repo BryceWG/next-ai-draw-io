@@ -37,7 +37,7 @@ import {
 } from "@/lib/langfuse"
 import { findServerModelById } from "@/lib/server-model-config"
 import { getSystemPrompt } from "@/lib/system-prompts"
-import { getUserIdFromRequest } from "@/lib/user-id"
+import { requireUser } from "@/lib/team-auth"
 
 export const maxDuration = 120
 
@@ -73,6 +73,9 @@ function createCachedStreamResponse(xml: string): Response {
 
 // Inner handler function
 async function handleChatRequest(req: Request): Promise<Response> {
+    const auth = await requireUser(req)
+    if (!auth.ok) return auth.response
+
     // Check for access code
     const accessCodes =
         process.env.ACCESS_CODE_LIST?.split(",")
@@ -98,7 +101,7 @@ async function handleChatRequest(req: Request): Promise<Response> {
             : ""
 
     // Get user ID for Langfuse tracking and quota
-    const userId = getUserIdFromRequest(req)
+    const userId = auth.user.id
 
     // Validate sessionId for Langfuse (must be string, max 200 chars)
     const validSessionId =

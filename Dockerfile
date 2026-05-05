@@ -53,6 +53,7 @@ ENV NEXT_TELEMETRY_DISABLED=1
 # Create non-root user for security
 RUN addgroup --system --gid 1001 nodejs
 RUN adduser --system --uid 1001 nextjs
+RUN mkdir -p /app/data /app/config && chown -R nextjs:nodejs /app/data /app/config
 
 # Copy necessary files
 COPY --from=builder /app/public ./public
@@ -70,4 +71,3 @@ ENV HOSTNAME="0.0.0.0"
 
 # Start the application (HOSTNAME override needed for AWS App Runner)
 CMD ["sh", "-c", "HOSTNAME=0.0.0.0 exec node server.js"]
-

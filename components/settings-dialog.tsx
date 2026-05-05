@@ -1,6 +1,14 @@
 "use client"
 
-import { ChevronRight, Github, Info, Moon, Sun, Tag } from "lucide-react"
+import {
+    ChevronRight,
+    Github,
+    Info,
+    LogOut,
+    Moon,
+    Sun,
+    Tag,
+} from "lucide-react"
 import { usePathname, useRouter, useSearchParams } from "next/navigation"
 import { Suspense, useCallback, useEffect, useState } from "react"
 import { toast } from "sonner"
@@ -111,6 +119,11 @@ function SettingsContent({
     const [accessCodeRequired, setAccessCodeRequired] = useState(
         () => getStoredAccessCodeRequired() ?? false,
     )
+    const [authEnabled, setAuthEnabled] = useState(false)
+    const [authUser, setAuthUser] = useState<{
+        id: string
+        name?: string
+    } | null>(null)
     const [currentLang, setCurrentLang] = useState("en")
     const [sendShortcut, setSendShortcut] = useState("ctrl-enter")
 
@@ -191,6 +204,17 @@ function SettingsContent({
 
             setError("")
 
+            fetch(getApiEndpoint("/api/auth/me"))
+                .then((res) => res.json())
+                .then((data) => {
+                    setAuthEnabled(data.authEnabled === true)
+                    setAuthUser(data.user || null)
+                })
+                .catch(() => {
+                    setAuthEnabled(false)
+                    setAuthUser(null)
+                })
+
             // Load proxy settings (Electron only)
             if (window.electronAPI?.getProxy) {
                 window.electronAPI.getProxy().then((config) => {
@@ -200,6 +224,11 @@ function SettingsContent({
             }
         }
     }, [open])
+
+    const handleLogout = async () => {
+        await fetch(getApiEndpoint("/api/auth/logout"), { method: "POST" })
+        router.replace(`/${currentLang}/login`)
+    }
 
     const changeLanguage = (lang: string) => {
         // Save locale to localStorage for persistence across restarts
@@ -333,6 +362,23 @@ function SettingsContent({
                                 aria-label={dict.settings.apiKeysModels}
                             >
                                 <ChevronRight className="h-4 w-4" />
+                            </Button>
+                        </SettingItem>
+                    )}
+
+                    {authEnabled && authUser && (
+                        <SettingItem
+                            label="Team Account"
+                            description={authUser.name || authUser.id}
+                        >
+                            <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={handleLogout}
+                                className="h-9 rounded-xl"
+                            >
+                                <LogOut className="h-4 w-4 mr-2" />
+                                Sign out
                             </Button>
                         </SettingItem>
                     )}

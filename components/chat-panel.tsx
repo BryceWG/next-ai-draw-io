@@ -1064,7 +1064,7 @@ export default function ChatPanel({
         continuationRetryCountRef.current = 0
         partialXmlRef.current = ""
 
-        const config = getSelectedAIConfig()
+        const config = getSelectedAIConfig(modelConfig.config)
 
         sendMessage(
             { parts },

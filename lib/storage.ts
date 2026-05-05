@@ -1,5 +1,5 @@
-// Centralized localStorage keys for quota tracking and settings
-// Chat data is now stored in IndexedDB via session-storage.ts
+// Centralized localStorage keys for quota tracking and UI-only settings.
+// Chat data and model configs are stored server-side for team deployments.
 
 export const STORAGE_KEYS = {
     // Quota tracking

@@ -11,7 +11,18 @@ services:
         # - NEXT_PUBLIC_BASE_PATH=/nextaidrawio
     ports: ["3000:3000"]
     env_file: .env
+    volumes:
+      - ./data:/app/data
+      # Enable team login by creating config/users.json and uncommenting:
+      # - ./config/users.json:/app/config/users.json:ro
+      # If ENABLE_TEAM_REGISTRATION=true, mount it read-write instead:
+      # - ./config/users.json:/app/config/users.json
     # environment:
+    #   AUTH_SECRET: change-me-to-a-long-random-string
+    #   TEAM_USERS_FILE: /app/config/users.json
+    #   TEAM_DATA_DIR: /app/data
+    #   AUTH_COOKIE_SECURE: "false"
+    #   ENABLE_TEAM_REGISTRATION: "false"
     #   # For subdirectory deployment, uncomment and set your path:
     #   NEXT_PUBLIC_BASE_PATH: /nextaidrawio
     depends_on: [drawio]

@@ -1,15 +1,6 @@
-import { type DBSchema, type IDBPDatabase, openDB } from "idb"
 import { nanoid } from "nanoid"
-import type { Template } from "./template-storage"
+import { getApiEndpoint } from "@/lib/base-path"
 
-// Constants
-const DB_NAME = "next-ai-drawio"
-const DB_VERSION = 2
-const STORE_NAME = "sessions"
-const MIGRATION_FLAG = "next-ai-drawio-migrated-to-idb"
-const MAX_SESSIONS = 50
-
-// Types
 export interface ChatSession {
     id: string
     title: string
@@ -18,8 +9,8 @@ export interface ChatSession {
     messages: StoredMessage[]
     xmlSnapshots: [number, string][]
     diagramXml: string
-    thumbnailDataUrl?: string // Small PNG preview of the diagram
-    diagramHistory?: { svg: string; xml: string }[] // Version history of diagram edits
+    thumbnailDataUrl?: string
+    diagramHistory?: { svg: string; xml: string }[]
 }
 
 export interface StoredMessage {
@@ -38,272 +29,106 @@ export interface SessionMetadata {
     thumbnailDataUrl?: string
 }
 
-interface ChatSessionDB extends DBSchema {
-    sessions: {
-        key: string
-        value: ChatSession
-        indexes: { "by-updated": number }
-    }
-    templates: {
-        key: string
-        value: Template
-        indexes: {
-            "by-updated": number
-            "by-pinned": number
-            "by-run-count": number
-            "by-last-used": number
-        }
-    }
-}
-
-// Database singleton
-let dbPromise: Promise<IDBPDatabase<ChatSessionDB>> | null = null
-const resetDBPromise = () => {
-    dbPromise = null
-}
-
-const isClosingError = (error: unknown): boolean => {
-    return (
-        error instanceof DOMException &&
-        error.name === "InvalidStateError" &&
-        /closing/i.test(error.message)
-    )
-}
-
-const withDB = async <T>(
-    action: (db: IDBPDatabase<ChatSessionDB>) => Promise<T>,
-): Promise<T> => {
+async function fetchJson<T>(
+    input: string,
+    init?: RequestInit,
+): Promise<T | null> {
     try {
-        const db = await getDB()
-        return await action(db)
-    } catch (error) {
-        if (isClosingError(error)) {
-            resetDBPromise()
-            const db = await getDB()
-            return await action(db)
-        }
-        throw error
-    }
-}
-
-async function getDB(): Promise<IDBPDatabase<ChatSessionDB>> {
-    if (!dbPromise) {
-        dbPromise = openDB<ChatSessionDB>(DB_NAME, DB_VERSION, {
-            upgrade(db, oldVersion) {
-                if (oldVersion < 1) {
-                    const store = db.createObjectStore(STORE_NAME, {
-                        keyPath: "id",
-                    })
-                    store.createIndex("by-updated", "updatedAt")
-                }
-                // Version 2: templates store (added by template-storage.ts)
-                // Note: We also need to include this here to ensure the upgrade
-                // callback properly handles all migrations when opening from this file
-                if (oldVersion < 2) {
-                    // Check if templates store already exists (created by template-storage.ts)
-                    if (!db.objectStoreNames.contains("templates")) {
-                        const templateStore = db.createObjectStore(
-                            "templates",
-                            {
-                                keyPath: "id",
-                            },
-                        )
-                        templateStore.createIndex("by-updated", "updatedAt")
-                        templateStore.createIndex("by-pinned", "pinned")
-                        templateStore.createIndex("by-run-count", "runCount")
-                        templateStore.createIndex("by-last-used", "lastUsedAt")
-                    }
-                }
-            },
-            terminated() {
-                resetDBPromise()
+        const response = await fetch(getApiEndpoint(input), {
+            ...init,
+            headers: {
+                "Content-Type": "application/json",
+                ...init?.headers,
             },
         })
-        dbPromise
-            .then((db) => {
-                db.onversionchange = () => {
-                    db.close()
-                    resetDBPromise()
-                }
-                db.onclose = () => {
-                    resetDBPromise()
-                }
-            })
-            .catch(() => {
-                resetDBPromise()
-            })
-    }
-    return dbPromise
-}
-
-// Check if IndexedDB is available
-export function isIndexedDBAvailable(): boolean {
-    if (typeof window === "undefined") return false
-    try {
-        return "indexedDB" in window && window.indexedDB !== null
-    } catch {
-        return false
-    }
-}
-
-// Check if IndexedDB is actually usable (not just present).
-// Note: Do NOT close the db here - getDB() returns a shared singleton connection
-// that other code depends on.
-export async function isIndexedDBUsable(): Promise<boolean> {
-    if (!isIndexedDBAvailable()) return false
-    try {
-        await getDB()
-        return true
-    } catch {
-        return false
-    }
-}
-
-// CRUD Operations
-export async function getAllSessionMetadata(): Promise<SessionMetadata[]> {
-    if (!isIndexedDBAvailable()) return []
-    try {
-        return await withDB(async (db) => {
-            const tx = db.transaction(STORE_NAME, "readonly")
-            const index = tx.store.index("by-updated")
-            const metadata: SessionMetadata[] = []
-
-            // Use cursor to read only metadata fields (avoids loading full messages/XML)
-            let cursor = await index.openCursor(null, "prev") // newest first
-            while (cursor) {
-                const s = cursor.value
-                metadata.push({
-                    id: s.id,
-                    title: s.title,
-                    createdAt: s.createdAt,
-                    updatedAt: s.updatedAt,
-                    messageCount: s.messages.length,
-                    hasDiagram:
-                        !!s.diagramXml && s.diagramXml.trim().length > 0,
-                    thumbnailDataUrl: s.thumbnailDataUrl,
-                })
-                cursor = await cursor.continue()
-            }
-            return metadata
-        })
+        if (!response.ok) {
+            console.error(
+                `Session request failed: ${response.status} ${response.statusText}`,
+            )
+            return null
+        }
+        return (await response.json()) as T
     } catch (error) {
-        console.error("Failed to get session metadata:", error)
-        return []
-    }
-}
-
-export async function getSession(id: string): Promise<ChatSession | null> {
-    if (!isIndexedDBAvailable()) return null
-    try {
-        return await withDB(async (db) => {
-            return (await db.get(STORE_NAME, id)) || null
-        })
-    } catch (error) {
-        console.error("Failed to get session:", error)
+        console.error("Session request failed:", error)
         return null
     }
 }
 
+export function isIndexedDBAvailable(): boolean {
+    return typeof window !== "undefined"
+}
+
+export async function isIndexedDBUsable(): Promise<boolean> {
+    return typeof window !== "undefined"
+}
+
+export async function getAllSessionMetadata(): Promise<SessionMetadata[]> {
+    const data = await fetchJson<{ sessions: SessionMetadata[] }>(
+        "/api/sessions",
+    )
+    return data?.sessions || []
+}
+
+export async function getSession(id: string): Promise<ChatSession | null> {
+    const data = await fetchJson<{ session: ChatSession }>(
+        `/api/sessions/${encodeURIComponent(id)}`,
+    )
+    return data?.session || null
+}
+
 export async function saveSession(session: ChatSession): Promise<boolean> {
-    if (!isIndexedDBAvailable()) return false
-    try {
-        await withDB(async (db) => {
-            await db.put(STORE_NAME, session)
-        })
-        return true
-    } catch (error) {
-        // Handle quota exceeded
-        if (
-            error instanceof DOMException &&
-            error.name === "QuotaExceededError"
-        ) {
-            console.warn("Storage quota exceeded, deleting oldest session...")
-            await deleteOldestSession()
-            // Retry once
-            try {
-                await withDB(async (db) => {
-                    await db.put(STORE_NAME, session)
-                })
-                return true
-            } catch (retryError) {
-                console.error(
-                    "Failed to save session after cleanup:",
-                    retryError,
-                )
-                return false
-            }
-        } else {
-            console.error("Failed to save session:", error)
-            return false
-        }
-    }
+    const endpoint = `/api/sessions/${encodeURIComponent(session.id)}`
+    const data = await fetchJson<{ session: ChatSession }>(endpoint, {
+        method: "PUT",
+        body: JSON.stringify({ session }),
+    })
+    return !!data?.session
+}
+
+export async function createSession(session: ChatSession): Promise<boolean> {
+    const data = await fetchJson<{ session: ChatSession }>("/api/sessions", {
+        method: "POST",
+        body: JSON.stringify({ session }),
+    })
+    return !!data?.session
 }
 
 export async function deleteSession(id: string): Promise<void> {
-    if (!isIndexedDBAvailable()) return
-    try {
-        await withDB(async (db) => {
-            await db.delete(STORE_NAME, id)
-        })
-    } catch (error) {
-        console.error("Failed to delete session:", error)
-    }
+    await fetchJson<{ ok: true }>(`/api/sessions/${encodeURIComponent(id)}`, {
+        method: "DELETE",
+    })
 }
 
 export async function getSessionCount(): Promise<number> {
-    if (!isIndexedDBAvailable()) return 0
-    try {
-        return await withDB(async (db) => {
-            return await db.count(STORE_NAME)
-        })
-    } catch (error) {
-        console.error("Failed to get session count:", error)
-        return 0
-    }
+    const metadata = await getAllSessionMetadata()
+    return metadata.length
 }
 
 export async function deleteOldestSession(): Promise<void> {
-    if (!isIndexedDBAvailable()) return
-    try {
-        await withDB(async (db) => {
-            const tx = db.transaction(STORE_NAME, "readwrite")
-            const index = tx.store.index("by-updated")
-            const cursor = await index.openCursor()
-            if (cursor) {
-                await cursor.delete()
-            }
-            await tx.done
-        })
-    } catch (error) {
-        console.error("Failed to delete oldest session:", error)
+    const metadata = await getAllSessionMetadata()
+    const oldest = [...metadata].sort((a, b) => a.updatedAt - b.updatedAt)[0]
+    if (oldest) {
+        await deleteSession(oldest.id)
     }
 }
 
-// Enforce max sessions limit
 export async function enforceSessionLimit(): Promise<void> {
-    const count = await getSessionCount()
-    if (count > MAX_SESSIONS) {
-        const toDelete = count - MAX_SESSIONS
-        for (let i = 0; i < toDelete; i++) {
-            await deleteOldestSession()
-        }
-    }
+    // Server-backed storage intentionally keeps all sessions for small teams.
 }
 
-// Helper: Create a new empty session
 export function createEmptySession(): ChatSession {
+    const now = Date.now()
     return {
         id: nanoid(),
         title: "New Chat",
-        createdAt: Date.now(),
-        updatedAt: Date.now(),
+        createdAt: now,
+        updatedAt: now,
         messages: [],
         xmlSnapshots: [],
         diagramXml: "",
     }
 }
 
-// Helper: Extract title from first user message (truncated to reasonable length)
 const MAX_TITLE_LENGTH = 100
 
 export function extractTitle(messages: StoredMessage[]): string {
@@ -316,14 +141,12 @@ export function extractTitle(messages: StoredMessage[]): string {
     const text = textPart.text.trim()
     if (!text) return "New Chat"
 
-    // Truncate long titles
     if (text.length > MAX_TITLE_LENGTH) {
-        return text.slice(0, MAX_TITLE_LENGTH).trim() + "..."
+        return `${text.slice(0, MAX_TITLE_LENGTH).trim()}...`
     }
     return text
 }
 
-// Helper: Sanitize UIMessage to StoredMessage
 export function sanitizeMessage(message: unknown): StoredMessage | null {
     if (!message || typeof message !== "object") return null
 
@@ -333,13 +156,11 @@ export function sanitizeMessage(message: unknown): StoredMessage | null {
     const role = msg.role as string
     if (!["user", "assistant", "system"].includes(role)) return null
 
-    // Extract parts, removing streaming state artifacts
     let parts: Array<{ type: string; [key: string]: unknown }> = []
     if (Array.isArray(msg.parts)) {
         parts = msg.parts.map((part: unknown) => {
             if (!part || typeof part !== "object") return { type: "unknown" }
             const p = part as Record<string, unknown>
-            // Remove streaming-related fields
             const { isStreaming, streamingState, ...cleanPart } = p
             return cleanPart as { type: string; [key: string]: unknown }
         })
@@ -358,73 +179,6 @@ export function sanitizeMessages(messages: unknown[]): StoredMessage[] {
         .filter((m): m is StoredMessage => m !== null)
 }
 
-// Migration from localStorage
 export async function migrateFromLocalStorage(): Promise<string | null> {
-    if (typeof window === "undefined") return null
-    if (!isIndexedDBAvailable()) return null
-
-    // Check if already migrated
-    if (localStorage.getItem(MIGRATION_FLAG)) return null
-
-    try {
-        const savedMessages = localStorage.getItem("next-ai-draw-io-messages")
-        const savedSnapshots = localStorage.getItem(
-            "next-ai-draw-io-xml-snapshots",
-        )
-        const savedXml = localStorage.getItem("next-ai-draw-io-diagram-xml")
-
-        let newSessionId: string | null = null
-        let migrationSucceeded = false
-
-        if (savedMessages) {
-            const messages = JSON.parse(savedMessages)
-            if (Array.isArray(messages) && messages.length > 0) {
-                const sanitized = sanitizeMessages(messages)
-                const session: ChatSession = {
-                    id: nanoid(),
-                    title: extractTitle(sanitized),
-                    createdAt: Date.now(),
-                    updatedAt: Date.now(),
-                    messages: sanitized,
-                    xmlSnapshots: savedSnapshots
-                        ? JSON.parse(savedSnapshots)
-                        : [],
-                    diagramXml: savedXml || "",
-                }
-                const saved = await saveSession(session)
-                if (saved) {
-                    // Verify the session was actually written
-                    const verified = await getSession(session.id)
-                    if (verified) {
-                        newSessionId = session.id
-                        migrationSucceeded = true
-                    }
-                }
-            } else {
-                // Empty array or invalid data - nothing to migrate, mark as success
-                migrationSucceeded = true
-            }
-        } else {
-            // No data to migrate - mark as success
-            migrationSucceeded = true
-        }
-
-        // Only clean up old data if migration succeeded
-        if (migrationSucceeded) {
-            localStorage.setItem(MIGRATION_FLAG, "true")
-            localStorage.removeItem("next-ai-draw-io-messages")
-            localStorage.removeItem("next-ai-draw-io-xml-snapshots")
-            localStorage.removeItem("next-ai-draw-io-diagram-xml")
-        } else {
-            console.warn(
-                "Migration to IndexedDB failed - keeping localStorage data for retry",
-            )
-        }
-
-        return newSessionId
-    } catch (error) {
-        console.error("Migration failed:", error)
-        // Don't mark as migrated - allow retry on next load
-        return null
-    }
+    return null
 }

@@ -11,6 +11,7 @@ import { NextResponse } from "next/server"
 import { createOllama } from "ollama-ai-provider-v2"
 import { normalizeMiniMaxBaseURL } from "@/lib/ai-providers"
 import { allowPrivateUrls, isPrivateUrl } from "@/lib/ssrf-protection"
+import { requireUser } from "@/lib/team-auth"
 import { PROVIDER_INFO, type ProviderName } from "@/lib/types/model-config"
 
 export const runtime = "nodejs"
@@ -30,6 +31,9 @@ interface ValidateRequest {
 
 export async function POST(req: Request) {
     try {
+        const auth = await requireUser(req)
+        if (!auth.ok) return auth.response
+
         const body: ValidateRequest = await req.json()
         const {
             provider,
