@@ -53,6 +53,7 @@ import { Switch } from "@/components/ui/switch"
 import { useDictionary } from "@/hooks/use-dictionary"
 import type { UseModelConfigReturn } from "@/hooks/use-model-config"
 import { formatMessage } from "@/lib/i18n/utils"
+import { supportsImageInput } from "@/lib/model-capabilities"
 import type { ProviderConfig, ProviderName } from "@/lib/types/model-config"
 import {
     PROVIDER_INFO,
@@ -1400,239 +1401,296 @@ export function ModelConfigDialog({
                                             ) : (
                                                 <div className="divide-y divide-border-subtle">
                                                     {selectedProvider.models.map(
-                                                        (model, index) => (
-                                                            <div
-                                                                key={model.id}
-                                                                className={cn(
-                                                                    "transition-colors duration-150 hover:bg-interactive-hover/50",
-                                                                )}
-                                                            >
-                                                                <div className="flex items-center gap-3 p-3 min-w-0">
-                                                                    {/* Status icon */}
-                                                                    <div className="flex items-center justify-center w-8 h-8 rounded-lg flex-shrink-0">
-                                                                        {validatingModelIndex !==
-                                                                            null &&
-                                                                        index ===
-                                                                            validatingModelIndex ? (
-                                                                            // Currently validating
-                                                                            <div className="w-full h-full rounded-lg bg-blue-500/10 flex items-center justify-center">
-                                                                                <Loader2 className="h-4 w-4 text-blue-500 animate-spin" />
-                                                                            </div>
-                                                                        ) : validatingModelIndex !==
-                                                                              null &&
-                                                                          index >
-                                                                              validatingModelIndex &&
-                                                                          model.validated ===
-                                                                              undefined ? (
-                                                                            // Queued
-                                                                            <div className="w-full h-full rounded-lg bg-muted flex items-center justify-center">
-                                                                                <Clock className="h-4 w-4 text-muted-foreground" />
-                                                                            </div>
-                                                                        ) : model.validated ===
-                                                                          true ? (
-                                                                            // Valid
-                                                                            <div className="w-full h-full rounded-lg bg-success-muted flex items-center justify-center">
-                                                                                <Check className="h-4 w-4 text-success" />
-                                                                            </div>
-                                                                        ) : model.validated ===
-                                                                          false ? (
-                                                                            // Invalid
-                                                                            <div className="w-full h-full rounded-lg bg-destructive/10 flex items-center justify-center">
-                                                                                <AlertCircle className="h-4 w-4 text-destructive" />
-                                                                            </div>
-                                                                        ) : (
-                                                                            // Not validated yet
-                                                                            <div className="w-full h-full rounded-lg bg-primary/5 flex items-center justify-center">
-                                                                                <Zap className="h-4 w-4 text-primary" />
-                                                                            </div>
-                                                                        )}
-                                                                    </div>
-                                                                    <Input
-                                                                        value={
-                                                                            model.modelId
-                                                                        }
-                                                                        title={
-                                                                            model.modelId
-                                                                        }
-                                                                        onChange={(
-                                                                            e,
-                                                                        ) => {
-                                                                            // Allow free typing - validation happens on blur
-                                                                            // Clear edit error when typing
-                                                                            if (
-                                                                                editError?.modelId ===
-                                                                                model.id
-                                                                            ) {
+                                                        (model, index) => {
+                                                            const autoVision =
+                                                                supportsImageInput(
+                                                                    model.modelId,
+                                                                )
+                                                            const visionEnabled =
+                                                                autoVision ||
+                                                                model.visionEnabled ===
+                                                                    true
+
+                                                            return (
+                                                                <div
+                                                                    key={
+                                                                        model.id
+                                                                    }
+                                                                    className={cn(
+                                                                        "transition-colors duration-150 hover:bg-interactive-hover/50",
+                                                                    )}
+                                                                >
+                                                                    <div className="flex items-center gap-3 p-3 min-w-0">
+                                                                        {/* Status icon */}
+                                                                        <div className="flex items-center justify-center w-8 h-8 rounded-lg flex-shrink-0">
+                                                                            {validatingModelIndex !==
+                                                                                null &&
+                                                                            index ===
+                                                                                validatingModelIndex ? (
+                                                                                // Currently validating
+                                                                                <div className="w-full h-full rounded-lg bg-blue-500/10 flex items-center justify-center">
+                                                                                    <Loader2 className="h-4 w-4 text-blue-500 animate-spin" />
+                                                                                </div>
+                                                                            ) : validatingModelIndex !==
+                                                                                  null &&
+                                                                              index >
+                                                                                  validatingModelIndex &&
+                                                                              model.validated ===
+                                                                                  undefined ? (
+                                                                                // Queued
+                                                                                <div className="w-full h-full rounded-lg bg-muted flex items-center justify-center">
+                                                                                    <Clock className="h-4 w-4 text-muted-foreground" />
+                                                                                </div>
+                                                                            ) : model.validated ===
+                                                                              true ? (
+                                                                                // Valid
+                                                                                <div className="w-full h-full rounded-lg bg-success-muted flex items-center justify-center">
+                                                                                    <Check className="h-4 w-4 text-success" />
+                                                                                </div>
+                                                                            ) : model.validated ===
+                                                                              false ? (
+                                                                                // Invalid
+                                                                                <div className="w-full h-full rounded-lg bg-destructive/10 flex items-center justify-center">
+                                                                                    <AlertCircle className="h-4 w-4 text-destructive" />
+                                                                                </div>
+                                                                            ) : (
+                                                                                // Not validated yet
+                                                                                <div className="w-full h-full rounded-lg bg-primary/5 flex items-center justify-center">
+                                                                                    <Zap className="h-4 w-4 text-primary" />
+                                                                                </div>
+                                                                            )}
+                                                                        </div>
+                                                                        <Input
+                                                                            value={
+                                                                                model.modelId
+                                                                            }
+                                                                            title={
+                                                                                model.modelId
+                                                                            }
+                                                                            onChange={(
+                                                                                e,
+                                                                            ) => {
+                                                                                // Allow free typing - validation happens on blur
+                                                                                // Clear edit error when typing
+                                                                                if (
+                                                                                    editError?.modelId ===
+                                                                                    model.id
+                                                                                ) {
+                                                                                    setEditError(
+                                                                                        null,
+                                                                                    )
+                                                                                }
+                                                                                if (
+                                                                                    selectedProviderId
+                                                                                ) {
+                                                                                    updateModel(
+                                                                                        selectedProviderId,
+                                                                                        model.id,
+                                                                                        {
+                                                                                            modelId:
+                                                                                                e
+                                                                                                    .target
+                                                                                                    .value,
+                                                                                            validated:
+                                                                                                undefined,
+                                                                                            validationError:
+                                                                                                undefined,
+                                                                                        },
+                                                                                    )
+                                                                                }
+                                                                            }}
+                                                                            onKeyDown={(
+                                                                                e,
+                                                                            ) => {
+                                                                                if (
+                                                                                    e.key ===
+                                                                                    "Enter"
+                                                                                ) {
+                                                                                    e.currentTarget.blur()
+                                                                                }
+                                                                            }}
+                                                                            onBlur={(
+                                                                                e,
+                                                                            ) => {
+                                                                                const newModelId =
+                                                                                    e.target.value.trim()
+
+                                                                                // Helper to show error with shake
+                                                                                const showError =
+                                                                                    (
+                                                                                        message: string,
+                                                                                    ) => {
+                                                                                        setEditError(
+                                                                                            {
+                                                                                                modelId:
+                                                                                                    model.id,
+                                                                                                message,
+                                                                                            },
+                                                                                        )
+                                                                                        e.target.animate(
+                                                                                            [
+                                                                                                {
+                                                                                                    transform:
+                                                                                                        "translateX(0)",
+                                                                                                },
+                                                                                                {
+                                                                                                    transform:
+                                                                                                        "translateX(-4px)",
+                                                                                                },
+                                                                                                {
+                                                                                                    transform:
+                                                                                                        "translateX(4px)",
+                                                                                                },
+                                                                                                {
+                                                                                                    transform:
+                                                                                                        "translateX(-4px)",
+                                                                                                },
+                                                                                                {
+                                                                                                    transform:
+                                                                                                        "translateX(4px)",
+                                                                                                },
+                                                                                                {
+                                                                                                    transform:
+                                                                                                        "translateX(0)",
+                                                                                                },
+                                                                                            ],
+                                                                                            {
+                                                                                                duration: 400,
+                                                                                                easing: "ease-in-out",
+                                                                                            },
+                                                                                        )
+                                                                                        e.target.focus()
+                                                                                    }
+
+                                                                                // Check for empty model name
+                                                                                if (
+                                                                                    !newModelId
+                                                                                ) {
+                                                                                    showError(
+                                                                                        dict
+                                                                                            .modelConfig
+                                                                                            .modelIdEmpty,
+                                                                                    )
+                                                                                    return
+                                                                                }
+
+                                                                                // Check for duplicate
+                                                                                const otherModelIds =
+                                                                                    selectedProvider?.models
+                                                                                        .filter(
+                                                                                            (
+                                                                                                m,
+                                                                                            ) =>
+                                                                                                m.id !==
+                                                                                                model.id,
+                                                                                        )
+                                                                                        .map(
+                                                                                            (
+                                                                                                m,
+                                                                                            ) =>
+                                                                                                m.modelId,
+                                                                                        ) ||
+                                                                                    []
+                                                                                if (
+                                                                                    otherModelIds.includes(
+                                                                                        newModelId,
+                                                                                    )
+                                                                                ) {
+                                                                                    showError(
+                                                                                        dict
+                                                                                            .modelConfig
+                                                                                            .modelIdExists,
+                                                                                    )
+                                                                                    return
+                                                                                }
+
+                                                                                // Clear error on valid blur
                                                                                 setEditError(
                                                                                     null,
                                                                                 )
-                                                                            }
-                                                                            if (
-                                                                                selectedProviderId
-                                                                            ) {
-                                                                                updateModel(
-                                                                                    selectedProviderId,
-                                                                                    model.id,
-                                                                                    {
-                                                                                        modelId:
-                                                                                            e
-                                                                                                .target
-                                                                                                .value,
-                                                                                        validated:
-                                                                                            undefined,
-                                                                                        validationError:
-                                                                                            undefined,
-                                                                                    },
-                                                                                )
-                                                                            }
-                                                                        }}
-                                                                        onKeyDown={(
-                                                                            e,
-                                                                        ) => {
-                                                                            if (
-                                                                                e.key ===
-                                                                                "Enter"
-                                                                            ) {
-                                                                                e.currentTarget.blur()
-                                                                            }
-                                                                        }}
-                                                                        onBlur={(
-                                                                            e,
-                                                                        ) => {
-                                                                            const newModelId =
-                                                                                e.target.value.trim()
-
-                                                                            // Helper to show error with shake
-                                                                            const showError =
-                                                                                (
-                                                                                    message: string,
-                                                                                ) => {
-                                                                                    setEditError(
-                                                                                        {
-                                                                                            modelId:
-                                                                                                model.id,
-                                                                                            message,
-                                                                                        },
-                                                                                    )
-                                                                                    e.target.animate(
-                                                                                        [
-                                                                                            {
-                                                                                                transform:
-                                                                                                    "translateX(0)",
-                                                                                            },
-                                                                                            {
-                                                                                                transform:
-                                                                                                    "translateX(-4px)",
-                                                                                            },
-                                                                                            {
-                                                                                                transform:
-                                                                                                    "translateX(4px)",
-                                                                                            },
-                                                                                            {
-                                                                                                transform:
-                                                                                                    "translateX(-4px)",
-                                                                                            },
-                                                                                            {
-                                                                                                transform:
-                                                                                                    "translateX(4px)",
-                                                                                            },
-                                                                                            {
-                                                                                                transform:
-                                                                                                    "translateX(0)",
-                                                                                            },
-                                                                                        ],
-                                                                                        {
-                                                                                            duration: 400,
-                                                                                            easing: "ease-in-out",
-                                                                                        },
-                                                                                    )
-                                                                                    e.target.focus()
+                                                                            }}
+                                                                            className="flex-1 min-w-0 font-mono text-sm h-8 border-0 bg-transparent focus-visible:bg-background focus-visible:ring-1"
+                                                                        />
+                                                                        <div className="flex items-center gap-2 shrink-0">
+                                                                            <Switch
+                                                                                id={`vision-${model.id}`}
+                                                                                checked={
+                                                                                    visionEnabled
                                                                                 }
-
-                                                                            // Check for empty model name
-                                                                            if (
-                                                                                !newModelId
-                                                                            ) {
-                                                                                showError(
-                                                                                    dict
-                                                                                        .modelConfig
-                                                                                        .modelIdEmpty,
-                                                                                )
-                                                                                return
-                                                                            }
-
-                                                                            // Check for duplicate
-                                                                            const otherModelIds =
-                                                                                selectedProvider?.models
-                                                                                    .filter(
-                                                                                        (
-                                                                                            m,
-                                                                                        ) =>
-                                                                                            m.id !==
+                                                                                disabled={
+                                                                                    autoVision
+                                                                                }
+                                                                                onCheckedChange={(
+                                                                                    checked,
+                                                                                ) => {
+                                                                                    if (
+                                                                                        selectedProviderId
+                                                                                    ) {
+                                                                                        updateModel(
+                                                                                            selectedProviderId,
                                                                                             model.id,
-                                                                                    )
-                                                                                    .map(
-                                                                                        (
-                                                                                            m,
-                                                                                        ) =>
-                                                                                            m.modelId,
-                                                                                    ) ||
-                                                                                []
-                                                                            if (
-                                                                                otherModelIds.includes(
-                                                                                    newModelId,
-                                                                                )
-                                                                            ) {
-                                                                                showError(
+                                                                                            {
+                                                                                                visionEnabled:
+                                                                                                    checked,
+                                                                                            },
+                                                                                        )
+                                                                                    }
+                                                                                }}
+                                                                                aria-label={
                                                                                     dict
                                                                                         .modelConfig
-                                                                                        .modelIdExists,
+                                                                                        .visionMultimodal
+                                                                                }
+                                                                            />
+                                                                            <Label
+                                                                                htmlFor={`vision-${model.id}`}
+                                                                                className="text-[11px] text-muted-foreground cursor-pointer whitespace-nowrap"
+                                                                            >
+                                                                                {autoVision
+                                                                                    ? dict
+                                                                                          .modelConfig
+                                                                                          .visionAutoDetected
+                                                                                    : dict
+                                                                                          .modelConfig
+                                                                                          .visionMultimodal}
+                                                                            </Label>
+                                                                        </div>
+                                                                        <Button
+                                                                            variant="ghost"
+                                                                            size="icon"
+                                                                            className="h-7 w-7 text-muted-foreground hover:text-destructive"
+                                                                            onClick={() =>
+                                                                                handleDeleteModel(
+                                                                                    model.id,
                                                                                 )
-                                                                                return
                                                                             }
-
-                                                                            // Clear error on valid blur
-                                                                            setEditError(
-                                                                                null,
-                                                                            )
-                                                                        }}
-                                                                        className="flex-1 min-w-0 font-mono text-sm h-8 border-0 bg-transparent focus-visible:bg-background focus-visible:ring-1"
-                                                                    />
-                                                                    <Button
-                                                                        variant="ghost"
-                                                                        size="icon"
-                                                                        className="h-7 w-7 text-muted-foreground hover:text-destructive"
-                                                                        onClick={() =>
-                                                                            handleDeleteModel(
-                                                                                model.id,
-                                                                            )
-                                                                        }
-                                                                        aria-label={`Delete ${model.modelId}`}
-                                                                    >
-                                                                        <X className="h-4 w-4" />
-                                                                    </Button>
-                                                                </div>
-                                                                {/* Show validation error inline */}
-                                                                {model.validated ===
-                                                                    false &&
-                                                                    model.validationError && (
+                                                                            aria-label={`Delete ${model.modelId}`}
+                                                                        >
+                                                                            <X className="h-4 w-4" />
+                                                                        </Button>
+                                                                    </div>
+                                                                    {/* Show validation error inline */}
+                                                                    {model.validated ===
+                                                                        false &&
+                                                                        model.validationError && (
+                                                                            <p className="text-[11px] text-destructive px-3 pb-2 pl-14">
+                                                                                {
+                                                                                    model.validationError
+                                                                                }
+                                                                            </p>
+                                                                        )}
+                                                                    {/* Show edit error inline */}
+                                                                    {editError?.modelId ===
+                                                                        model.id && (
                                                                         <p className="text-[11px] text-destructive px-3 pb-2 pl-14">
                                                                             {
-                                                                                model.validationError
+                                                                                editError.message
                                                                             }
                                                                         </p>
                                                                     )}
-                                                                {/* Show edit error inline */}
-                                                                {editError?.modelId ===
-                                                                    model.id && (
-                                                                    <p className="text-[11px] text-destructive px-3 pb-2 pl-14">
-                                                                        {
-                                                                            editError.message
-                                                                        }
-                                                                    </p>
-                                                                )}
-                                                            </div>
-                                                        ),
+                                                                </div>
+                                                            )
+                                                        },
                                                     )}
                                                 </div>
                                             )}

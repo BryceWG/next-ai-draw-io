@@ -1104,6 +1104,9 @@ export default function ChatPanel({
                     ...(config.selectedModelId && {
                         "x-selected-model-id": config.selectedModelId,
                     }),
+                    ...(config.aiVisionEnabled && {
+                        "x-ai-vision-enabled": config.aiVisionEnabled,
+                    }),
                     ...(minimalStyle && {
                         "x-minimal-style": "true",
                     }),

@@ -166,6 +166,7 @@ export function useModelConfig(): UseModelConfigReturn {
             awsSessionToken: undefined,
             vertexApiKey: undefined,
             validated: true,
+            visionEnabled: undefined,
             source: "server" as const,
             isDefault: m.isDefault,
             apiKeyEnv: m.apiKeyEnv,
@@ -331,6 +332,7 @@ export function getSelectedAIConfig(config: MultiModelConfig): {
     awsRegion: string
     awsSessionToken: string
     selectedModelId: string
+    aiVisionEnabled: string
     vertexApiKey: string
 } {
     const empty = {
@@ -344,6 +346,7 @@ export function getSelectedAIConfig(config: MultiModelConfig): {
         awsRegion: "",
         awsSessionToken: "",
         selectedModelId: "",
+        aiVisionEnabled: "",
         vertexApiKey: "",
     }
 
@@ -381,6 +384,7 @@ export function getSelectedAIConfig(config: MultiModelConfig): {
         aiBaseUrl: model.baseUrl || "",
         aiApiKey: model.apiKey,
         aiModel: model.modelId,
+        aiVisionEnabled: model.visionEnabled === true ? "true" : "",
         awsAccessKeyId: model.awsAccessKeyId || "",
         awsSecretAccessKey: model.awsSecretAccessKey || "",
         awsRegion: model.awsRegion || "",

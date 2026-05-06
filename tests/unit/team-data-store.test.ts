@@ -14,7 +14,9 @@ import {
 } from "@/lib/team-data-store"
 import {
     createEmptyConfig,
+    createModelConfig,
     createProviderConfig,
+    flattenModels,
 } from "@/lib/types/model-config"
 
 const ORIGINAL_TEAM_DATA_DIR = process.env.TEAM_DATA_DIR
@@ -98,5 +100,32 @@ describe("team model config store", () => {
 
         expect(loadedAlice.providers[0].apiKey).toBe("alice-key")
         expect(loadedBob.providers).toEqual([])
+    })
+
+    it("preserves model-level vision settings in cloud storage", async () => {
+        const config = createEmptyConfig()
+        const provider = createProviderConfig("deepseek")
+        const model = createModelConfig("deepseek-vl-custom")
+        model.visionEnabled = true
+        provider.models = [model]
+        config.providers = [provider]
+
+        await saveModelConfigForUser("alice", config)
+
+        const loaded = await getModelConfigForUser("alice")
+        expect(loaded.providers[0].models[0].visionEnabled).toBe(true)
+    })
+
+    it("includes model-level vision settings when flattening models", () => {
+        const config = createEmptyConfig()
+        const provider = createProviderConfig("deepseek")
+        const model = createModelConfig("deepseek-vl-custom")
+        model.visionEnabled = true
+        provider.models = [model]
+        config.providers = [provider]
+
+        const flattened = flattenModels(config)
+
+        expect(flattened[0].visionEnabled).toBe(true)
     })
 })

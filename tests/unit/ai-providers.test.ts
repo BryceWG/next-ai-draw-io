@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import {
     getAIModel,
+    isImageInputAllowed,
     resolveBaseURL,
     supportsImageInput,
     supportsPromptCaching,
@@ -234,6 +235,20 @@ describe("supportsImageInput", () => {
         expect(supportsImageInput("claude-sonnet-4-5")).toBe(true)
         expect(supportsImageInput("gpt-4o")).toBe(true)
         expect(supportsImageInput("gemini-pro")).toBe(true)
+    })
+})
+
+describe("isImageInputAllowed", () => {
+    it("allows auto-detected vision models", () => {
+        expect(isImageInputAllowed("gpt-4o")).toBe(true)
+    })
+
+    it("blocks non-vision models by default", () => {
+        expect(isImageInputAllowed("deepseek-chat")).toBe(false)
+    })
+
+    it("allows manually enabled non-detected vision models", () => {
+        expect(isImageInputAllowed("deepseek-chat", true)).toBe(true)
     })
 })
 

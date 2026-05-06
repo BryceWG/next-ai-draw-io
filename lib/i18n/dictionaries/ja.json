@@ -354,6 +354,8 @@
         "showUnvalidatedModels": "未検証のモデルを表示",
         "allModelsShown": "すべてのモデルを表示（未検証を含む）",
         "unvalidatedModelWarning": "このモデルは検証されていません",
+        "visionMultimodal": "視覚マルチモーダル",
+        "visionAutoDetected": "自動検出済み",
         "serverDefaultModel": "サーバーデフォルトモデル"
     },
     "templates": {

@@ -14,8 +14,8 @@ import path from "path"
 import { z } from "zod"
 import {
     getAIModel,
+    isImageInputAllowed,
     SINGLE_SYSTEM_PROVIDERS,
-    supportsImageInput,
     supportsPromptCaching,
 } from "@/lib/ai-providers"
 import { findCachedResponse } from "@/lib/cached-responses"
@@ -38,6 +38,7 @@ import {
 import { findServerModelById } from "@/lib/server-model-config"
 import { getSystemPrompt } from "@/lib/system-prompts"
 import { requireUser } from "@/lib/team-auth"
+import { getModelConfigForUser } from "@/lib/team-data-store"
 
 export const maxDuration = 120
 
@@ -69,6 +70,30 @@ function createCachedStreamResponse(xml: string): Response {
     })
 
     return createUIMessageStreamResponse({ stream })
+}
+
+async function getManualVisionEnabledForSelectedModel(
+    userId: string,
+    selectedModelId: string | null,
+    headerVisionEnabled: string | null,
+): Promise<boolean | undefined> {
+    if (!selectedModelId || selectedModelId.startsWith("server:")) {
+        return undefined
+    }
+
+    if (headerVisionEnabled === "true") {
+        return true
+    }
+
+    const config = await getModelConfigForUser(userId)
+    for (const provider of config.providers) {
+        const model = provider.models.find((m) => m.id === selectedModelId)
+        if (model) {
+            return model.visionEnabled
+        }
+    }
+
+    return undefined
 }
 
 // Inner handler function
@@ -271,7 +296,19 @@ async function handleChatRequest(req: Request): Promise<Response> {
 
     // Check if user is sending images to a model that doesn't support them
     // AI SDK silently drops unsupported parts, so we need to catch this early
-    if (fileParts.length > 0 && !supportsImageInput(modelId)) {
+    const manualVisionEnabled =
+        fileParts.length > 0
+            ? await getManualVisionEnabledForSelectedModel(
+                  userId,
+                  selectedModelId,
+                  req.headers.get("x-ai-vision-enabled"),
+              )
+            : undefined
+
+    if (
+        fileParts.length > 0 &&
+        !isImageInputAllowed(modelId, manualVisionEnabled)
+    ) {
         return Response.json(
             {
                 error: `The model "${modelId}" does not support image input. Please use a vision-capable model (e.g., GPT-4o, Claude, Gemini) or remove the image.`,
