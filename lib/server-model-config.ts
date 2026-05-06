@@ -10,10 +10,24 @@ export const ProviderNameSchema: z.ZodType<ProviderName> = z
         message: "Invalid provider name",
     })
 
+export const ServerModelEntrySchema = z.union([
+    z.string().min(1),
+    z
+        .object({
+            id: z.string().min(1).optional(),
+            modelId: z.string().min(1).optional(),
+            visionEnabled: z.boolean().optional(),
+            multimodal: z.boolean().optional(),
+        })
+        .refine((model) => !!(model.id || model.modelId), {
+            message: "Server model entry must include id or modelId",
+        }),
+])
+
 export const ServerProviderSchema = z.object({
     name: z.string().min(1),
     provider: ProviderNameSchema,
-    models: z.array(z.string().min(1)),
+    models: z.array(ServerModelEntrySchema),
     // Optional: custom environment variable name(s) for API key
     // Can be a single string or array of strings for load balancing
     // e.g., "OPENAI_API_KEY_TEAM_A" or ["OPENAI_KEY_1", "OPENAI_KEY_2"]
@@ -32,6 +46,7 @@ export const ServerModelsConfigSchema = z.object({
 
 export type ServerProviderConfig = z.infer<typeof ServerProviderSchema>
 export type ServerModelsConfig = z.infer<typeof ServerModelsConfigSchema>
+export type ServerModelEntry = z.infer<typeof ServerModelEntrySchema>
 
 export interface FlattenedServerModel {
     id: string // "server:<slugified-name>:<modelId>" - name ensures uniqueness for multiple API keys per provider
@@ -39,11 +54,28 @@ export interface FlattenedServerModel {
     provider: ProviderName
     providerLabel: string
     isDefault: boolean
+    visionEnabled?: boolean
     // Custom env var name(s) for API key (optional)
     // Can be a single string or array of strings for load balancing
     apiKeyEnv?: string | string[]
     baseUrlEnv?: string
 }
+
+function getServerModelId(model: ServerModelEntry): string {
+    return typeof model === "string" ? model : model.id || model.modelId || ""
+}
+
+function getServerModelVisionEnabled(
+    model: ServerModelEntry,
+): boolean | undefined {
+    if (typeof model === "string") return undefined
+    return model.visionEnabled ?? model.multimodal
+}
+
+export type PublicServerModel = Omit<
+    FlattenedServerModel,
+    "apiKeyEnv" | "baseUrlEnv"
+>
 
 /**
  * Convert provider name to URL-safe slug for use in model ID
@@ -114,14 +146,16 @@ export async function loadFlattenedServerModels(): Promise<
         // Use slugified name for unique ID (supports multiple API keys per provider)
         const nameSlug = slugify(p.name)
 
-        for (const modelId of p.models) {
+        for (const modelConfig of p.models) {
+            const modelId = getServerModelId(modelConfig)
             const id = `server:${nameSlug}:${modelId}`
 
             // Default model priority:
             // 1. From ai-models.json: first model of provider with default: true
             // 2. From env vars: AI_MODEL matches (legacy behavior)
             const isDefault =
-                (p.default === true && modelId === p.models[0]) ||
+                (p.default === true &&
+                    modelId === getServerModelId(p.models[0])) ||
                 (!!defaultModelId &&
                     modelId === defaultModelId &&
                     (!defaultProvider || defaultProvider === p.provider))
@@ -132,6 +166,7 @@ export async function loadFlattenedServerModels(): Promise<
                 provider: p.provider,
                 providerLabel,
                 isDefault,
+                visionEnabled: getServerModelVisionEnabled(modelConfig),
                 apiKeyEnv: p.apiKeyEnv,
                 baseUrlEnv: p.baseUrlEnv,
             })
@@ -139,6 +174,27 @@ export async function loadFlattenedServerModels(): Promise<
     }
 
     return flattened
+}
+
+export function toPublicServerModel(
+    model: FlattenedServerModel,
+): PublicServerModel {
+    const publicModel: PublicServerModel = {
+        id: model.id,
+        modelId: model.modelId,
+        provider: model.provider,
+        providerLabel: model.providerLabel,
+        isDefault: model.isDefault,
+    }
+    if (model.visionEnabled !== undefined) {
+        publicModel.visionEnabled = model.visionEnabled
+    }
+    return publicModel
+}
+
+export async function loadPublicServerModels(): Promise<PublicServerModel[]> {
+    const models = await loadFlattenedServerModels()
+    return models.map(toPublicServerModel)
 }
 
 /**

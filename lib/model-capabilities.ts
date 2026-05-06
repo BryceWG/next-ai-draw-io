@@ -70,5 +70,5 @@ export function isImageInputAllowed(
     modelId: string,
     manualVisionEnabled?: boolean,
 ): boolean {
-    return supportsImageInput(modelId) || manualVisionEnabled === true
+    return manualVisionEnabled ?? supportsImageInput(modelId)
 }

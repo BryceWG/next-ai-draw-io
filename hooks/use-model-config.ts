@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react"
 import { getApiEndpoint } from "@/lib/base-path"
-import type { FlattenedServerModel } from "@/lib/server-model-config"
+import type { PublicServerModel } from "@/lib/server-model-config"
 import { STORAGE_KEYS } from "@/lib/storage"
 import {
     createEmptyConfig,
@@ -84,10 +84,35 @@ async function saveConfigToServer(config: MultiModelConfig): Promise<void> {
     }
 }
 
+export function pickDefaultServerModel(
+    models: PublicServerModel[],
+): PublicServerModel | undefined {
+    return models.find((model) => model.isDefault) || models[0]
+}
+
+export function resolveSelectedModelIdForServerModels(
+    selectedModelId: string | undefined,
+    models: PublicServerModel[],
+): string | undefined {
+    if (!selectedModelId) {
+        return pickDefaultServerModel(models)?.id
+    }
+
+    if (!selectedModelId.startsWith("server:")) {
+        return selectedModelId
+    }
+
+    if (models.some((model) => model.id === selectedModelId)) {
+        return selectedModelId
+    }
+
+    return pickDefaultServerModel(models)?.id
+}
+
 export function useModelConfig(): UseModelConfigReturn {
     const [config, setConfig] = useState<MultiModelConfig>(createEmptyConfig)
     const [isLoaded, setIsLoaded] = useState(false)
-    const [serverModels, setServerModels] = useState<FlattenedServerModel[]>([])
+    const [serverModels, setServerModels] = useState<PublicServerModel[]>([])
     const [serverLoaded, setServerLoaded] = useState(false)
     const saveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
@@ -114,16 +139,20 @@ export function useModelConfig(): UseModelConfigReturn {
                 return res.json()
             })
             .then((data) => {
-                const raw: FlattenedServerModel[] = data?.models || []
+                const raw: PublicServerModel[] = data?.models || []
                 setServerModels(raw)
                 setServerLoaded(true)
 
                 setConfig((prev) => {
-                    if (!prev.selectedModelId && raw.length > 0) {
-                        const defaultModel = raw.find((m) => m.isDefault)
+                    const selectedModelId =
+                        resolveSelectedModelIdForServerModels(
+                            prev.selectedModelId,
+                            raw,
+                        )
+                    if (selectedModelId !== prev.selectedModelId) {
                         return {
                             ...prev,
-                            selectedModelId: defaultModel?.id || raw[0].id,
+                            selectedModelId,
                         }
                     }
                     return prev
@@ -166,11 +195,9 @@ export function useModelConfig(): UseModelConfigReturn {
             awsSessionToken: undefined,
             vertexApiKey: undefined,
             validated: true,
-            visionEnabled: undefined,
+            visionEnabled: m.visionEnabled,
             source: "server" as const,
             isDefault: m.isDefault,
-            apiKeyEnv: m.apiKeyEnv,
-            baseUrlEnv: m.baseUrlEnv,
         })),
         ...userModels,
     ]
@@ -360,15 +387,9 @@ export function getSelectedAIConfig(config: MultiModelConfig): {
     }
 
     if (config.selectedModelId.startsWith("server:")) {
-        const parts = config.selectedModelId.split(":")
-        const nameSlug = parts[1] || ""
-        const modelId = parts.slice(2).join(":")
-
         return {
             ...empty,
             accessCode,
-            aiProvider: nameSlug,
-            aiModel: modelId,
             selectedModelId: config.selectedModelId,
         }
     }

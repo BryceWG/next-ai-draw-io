@@ -328,7 +328,12 @@ AI_MODELS_CONFIG='{"providers":[{"name":"OpenAI","provider":"openai","models":["
     {
       "name": "Custom DeepSeek",
       "provider": "deepseek",
-      "models": ["deepseek-chat"],
+      "models": [
+        {
+          "id": "deepseek-chat",
+          "visionEnabled": false
+        }
+      ],
       "apiKeyEnv": "MY_DEEPSEEK_KEY",
       "baseUrlEnv": "MY_DEEPSEEK_URL"
     }
@@ -342,7 +347,7 @@ AI_MODELS_CONFIG='{"providers":[{"name":"OpenAI","provider":"openai","models":["
 |------|------|------|
 | `name` | 是 | 显示名称（支持同一提供商多个配置） |
 | `provider` | 是 | 提供商类型（`openai`, `anthropic`, `google`, `bedrock` 等） |
-| `models` | 是 | 模型 ID 列表 |
+| `models` | 是 | 模型 ID 列表，支持字符串或对象格式 |
 | `default` | 否 | 设为 `true` 表示默认选中该提供商的第一个模型 |
 | `apiKeyEnv` | 否 | 自定义 API Key 环境变量名（默认使用提供商标准变量如 `OPENAI_API_KEY`） |
 | `baseUrlEnv` | 否 | 自定义 Base URL 环境变量名 |
@@ -352,6 +357,7 @@ AI_MODELS_CONFIG='{"providers":[{"name":"OpenAI","provider":"openai","models":["
 - API Key 和凭证通过环境变量提供。默认使用标准变量名（如 `OPENAI_API_KEY`），也可通过 `apiKeyEnv` 指定自定义变量名。
 - `name` 字段允许同一提供商多个配置（例如 "OpenAI Production" 和 "OpenAI Staging" 都使用 `provider: "openai"` 但 `apiKeyEnv` 不同）。
 - 如果配置不存在，应用会回退到 `AI_PROVIDER`/`AI_MODEL` 环境变量配置。
+- 如果需要手动声明模型是否支持图片/多模态输入，可把模型写成对象：`{"id":"qwen-vl-plus","visionEnabled":true}`。也支持 `modelId` 代替 `id`，以及 `multimodal` 作为 `visionEnabled` 的别名。
 
 ## 模型能力要求
 

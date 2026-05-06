@@ -250,6 +250,10 @@ describe("isImageInputAllowed", () => {
     it("allows manually enabled non-detected vision models", () => {
         expect(isImageInputAllowed("deepseek-chat", true)).toBe(true)
     })
+
+    it("allows manual config to disable an auto-detected vision model", () => {
+        expect(isImageInputAllowed("gpt-4o", false)).toBe(false)
+    })
 })
 
 vi.mock("ollama-ai-provider-v2", () => {

@@ -19,12 +19,60 @@ TEAM_USERS_FILE=/app/config/users.json
 TEAM_DATA_DIR=/app/data
 AUTH_COOKIE_SECURE=false
 ENABLE_TEAM_REGISTRATION=false
+AI_MODELS_CONFIG_PATH=/app/config/ai-models.json
 NEXT_PUBLIC_SELFHOSTED=true
 ```
 
 如果 VPS 前面已经有 HTTPS 反代，把 `AUTH_COOKIE_SECURE` 改成 `true`。
 
-## 2. 创建团队账号
+## 2. 配置服务端多模型
+
+创建 `config/ai-models.json`。模型 API Key 放在 `.env`，不要写进 JSON 配置文件：
+
+```json
+{
+  "providers": [
+    {
+      "name": "OpenAI",
+      "provider": "openai",
+      "models": ["gpt-4o", "gpt-4o-mini"],
+      "default": true
+    },
+    {
+      "name": "DeepSeek",
+      "provider": "deepseek",
+      "models": [
+        {
+          "id": "deepseek-chat",
+          "visionEnabled": false
+        }
+      ],
+      "apiKeyEnv": "DEEPSEEK_API_KEY"
+    }
+  ]
+}
+```
+
+在 `.env` 中写入对应密钥：
+
+```env
+OPENAI_API_KEY=sk-...
+DEEPSEEK_API_KEY=sk-...
+```
+
+`apiKeyEnv` 不是必填项。不写时会使用供应商默认环境变量，例如 OpenAI 使用 `OPENAI_API_KEY`，DeepSeek 使用 `DEEPSEEK_API_KEY`。`models` 也可以继续写成字符串数组；需要手动指定是否支持图片/多模态输入时，改用对象写法并设置 `visionEnabled`。
+
+确认 `docker-compose.yml` 中挂载了服务端模型配置：
+
+```yaml
+volumes:
+  - ./data:/app/data
+  - ./config/ai-models.json:/app/config/ai-models.json:ro
+```
+
+用户登录后会在模型选择器中看到这些服务端模型，模型项只显示模型 ID。不同账号选择的模型会跟随账号配置同步。
+
+## 3. 创建团队账号
 
 为每个成员生成密码哈希：
 
@@ -75,13 +123,14 @@ printf '[]\n' > config/users.json
 
 注册功能适合团队初始建号阶段使用。账号建完后，建议改回 `ENABLE_TEAM_REGISTRATION=false`，并把用户文件重新以只读方式挂载。
 
-## 3. 启动 Docker Compose
+## 4. 启动 Docker Compose
 
-确认 `docker-compose.yml` 里启用了用户文件挂载：
+确认 `docker-compose.yml` 里启用了服务端模型配置和用户文件挂载：
 
 ```yaml
 volumes:
   - ./data:/app/data
+  - ./config/ai-models.json:/app/config/ai-models.json:ro
   - ./config/users.json:/app/config/users.json:ro
 ```
 
@@ -99,7 +148,7 @@ http://你的服务器IP:3000
 
 登录后，聊天 session 会写入 `./data/sessions.json`，每个账号的模型配置会写入 `./data/model-configs.json`。历史列表只显示当前账号创建的 session；团队成员拿到 `?session=...` 链接并登录后可以直接打开。
 
-## 4. 使用 Caddy 反代 HTTPS
+## 5. 使用 Caddy 反代 HTTPS
 
 示例 `Caddyfile`：
 
@@ -121,7 +170,7 @@ AUTH_COOKIE_SECURE=true
 docker compose up -d
 ```
 
-## 5. 使用 Nginx 反代 HTTPS
+## 6. 使用 Nginx 反代 HTTPS
 
 示例配置：
 
@@ -140,7 +189,7 @@ server {
 
 配好证书后，同样把 `AUTH_COOKIE_SECURE=true` 并重启 Compose。
 
-## 6. 备份和升级
+## 7. 备份和升级
 
 备份团队数据：
 

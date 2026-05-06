@@ -77,8 +77,17 @@ async function getManualVisionEnabledForSelectedModel(
     selectedModelId: string | null,
     headerVisionEnabled: string | null,
 ): Promise<boolean | undefined> {
-    if (!selectedModelId || selectedModelId.startsWith("server:")) {
+    if (!selectedModelId) {
         return undefined
+    }
+
+    if (selectedModelId.startsWith("server:")) {
+        const serverModel = await findServerModelById(selectedModelId)
+        return serverModel?.visionEnabled
+    }
+
+    if (headerVisionEnabled === "false") {
+        return false
     }
 
     if (headerVisionEnabled === "true") {
@@ -127,6 +136,9 @@ async function handleChatRequest(req: Request): Promise<Response> {
 
     // Get user ID for Langfuse tracking and quota
     const userId = auth.user.id
+    const selectedModelId = req.headers.get("x-selected-model-id")
+    const isServerModelSelection =
+        selectedModelId?.startsWith("server:") === true
 
     // Validate sessionId for Langfuse (must be string, max 200 chars)
     const validSessionId =
@@ -152,6 +164,7 @@ async function handleChatRequest(req: Request): Promise<Response> {
     // === SERVER-SIDE QUOTA CHECK START ===
     // Quota is opt-in: only enabled when DYNAMODB_QUOTA_TABLE env var is set
     const hasOwnApiKey = !!(
+        !isServerModelSelection &&
         req.headers.get("x-ai-provider") &&
         (req.headers.get("x-ai-api-key") ||
             req.headers.get("x-aws-access-key-id") ||
@@ -205,57 +218,76 @@ async function handleChatRequest(req: Request): Promise<Response> {
 
     // Read client AI provider overrides from headers
     const provider = req.headers.get("x-ai-provider")
-    let baseUrl = req.headers.get("x-ai-base-url")
-    const selectedModelId = req.headers.get("x-selected-model-id")
-
-    // For EdgeOne provider, construct full URL from request origin
-    // because createOpenAI needs absolute URL, not relative path
-    if (provider === "edgeone" && !baseUrl) {
-        const origin = req.headers.get("origin") || new URL(req.url).origin
-        baseUrl = `${origin}/api/edgeai`
-    }
+    let baseUrl = isServerModelSelection
+        ? null
+        : req.headers.get("x-ai-base-url")
 
     // Get cookie header for EdgeOne authentication (eo_token, eo_time)
     const cookieHeader = req.headers.get("cookie")
 
-    // Check if this is a server model with custom env var names
+    // Check if this is a server model. The browser only sends the synthetic ID;
+    // provider, model ID, and env var names stay server-side.
     let serverModelConfig: {
         apiKeyEnv?: string | string[]
         baseUrlEnv?: string
         provider?: string
+        modelId?: string
     } = {}
-    if (selectedModelId?.startsWith("server:")) {
+    if (isServerModelSelection) {
         const serverModel = await findServerModelById(selectedModelId)
         console.log(
             `[Server Model Lookup] ID: ${selectedModelId}, Found: ${!!serverModel}, Provider: ${serverModel?.provider}`,
         )
-        if (serverModel) {
-            serverModelConfig = {
-                apiKeyEnv: serverModel.apiKeyEnv,
-                baseUrlEnv: serverModel.baseUrlEnv,
-                // Use actual provider from config (client header may have incorrect value due to ID format change)
-                provider: serverModel.provider,
-            }
+        if (!serverModel) {
+            return Response.json(
+                { error: "Selected server model is not configured" },
+                { status: 400 },
+            )
         }
+        serverModelConfig = {
+            apiKeyEnv: serverModel.apiKeyEnv,
+            baseUrlEnv: serverModel.baseUrlEnv,
+            provider: serverModel.provider,
+            modelId: serverModel.modelId,
+        }
+    }
+
+    const effectiveProvider = serverModelConfig.provider || provider
+
+    // For EdgeOne provider, construct full URL from request origin
+    // because createOpenAI needs absolute URL, not relative path
+    if (effectiveProvider === "edgeone" && !baseUrl) {
+        const origin = req.headers.get("origin") || new URL(req.url).origin
+        baseUrl = `${origin}/api/edgeai`
     }
 
     const clientOverrides = {
         // Server model provider takes precedence over client header
-        provider: serverModelConfig.provider || provider,
+        provider: effectiveProvider,
         baseUrl,
-        apiKey: req.headers.get("x-ai-api-key"),
-        modelId: req.headers.get("x-ai-model"),
+        apiKey: isServerModelSelection ? null : req.headers.get("x-ai-api-key"),
+        modelId: serverModelConfig.modelId || req.headers.get("x-ai-model"),
         // AWS Bedrock credentials
-        awsAccessKeyId: req.headers.get("x-aws-access-key-id"),
-        awsSecretAccessKey: req.headers.get("x-aws-secret-access-key"),
-        awsRegion: req.headers.get("x-aws-region"),
-        awsSessionToken: req.headers.get("x-aws-session-token"),
+        awsAccessKeyId: isServerModelSelection
+            ? null
+            : req.headers.get("x-aws-access-key-id"),
+        awsSecretAccessKey: isServerModelSelection
+            ? null
+            : req.headers.get("x-aws-secret-access-key"),
+        awsRegion: isServerModelSelection
+            ? null
+            : req.headers.get("x-aws-region"),
+        awsSessionToken: isServerModelSelection
+            ? null
+            : req.headers.get("x-aws-session-token"),
         // Server model custom env var names
         ...serverModelConfig,
         // Vertex AI credentials (Express Mode)
-        vertexApiKey: req.headers.get("x-vertex-api-key"),
+        vertexApiKey: isServerModelSelection
+            ? null
+            : req.headers.get("x-vertex-api-key"),
         // Pass cookies for EdgeOne Pages authentication
-        ...(provider === "edgeone" &&
+        ...(effectiveProvider === "edgeone" &&
             cookieHeader && {
                 headers: { cookie: cookieHeader },
             }),
