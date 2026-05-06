@@ -138,6 +138,13 @@ export async function loadFlattenedServerModels(): Promise<
     const defaultModelId = process.env.AI_MODEL
 
     const flattened: FlattenedServerModel[] = []
+    const explicitDefaultProvider = cfg.providers.find(
+        (provider) => provider.default === true,
+    )
+    const explicitDefaultModelId = explicitDefaultProvider
+        ? getServerModelId(explicitDefaultProvider.models[0])
+        : undefined
+    let hasMarkedDefault = false
 
     for (const p of cfg.providers) {
         const providerLabel =
@@ -153,12 +160,17 @@ export async function loadFlattenedServerModels(): Promise<
             // Default model priority:
             // 1. From ai-models.json: first model of provider with default: true
             // 2. From env vars: AI_MODEL matches (legacy behavior)
+            const isExplicitDefault =
+                p === explicitDefaultProvider &&
+                modelId === explicitDefaultModelId
+            const isLegacyEnvDefault =
+                !explicitDefaultProvider &&
+                !!defaultModelId &&
+                modelId === defaultModelId &&
+                (!defaultProvider || defaultProvider === p.provider)
             const isDefault =
-                (p.default === true &&
-                    modelId === getServerModelId(p.models[0])) ||
-                (!!defaultModelId &&
-                    modelId === defaultModelId &&
-                    (!defaultProvider || defaultProvider === p.provider))
+                !hasMarkedDefault && (isExplicitDefault || isLegacyEnvDefault)
+            if (isDefault) hasMarkedDefault = true
 
             flattened.push({
                 id,

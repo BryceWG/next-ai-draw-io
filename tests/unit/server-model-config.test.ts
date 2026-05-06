@@ -169,6 +169,96 @@ describe("loadFlattenedServerModels", () => {
         expect(defaultModel.modelId).toBe("gpt-4o") // First model of default provider
     })
 
+    it("uses explicit config default instead of also marking AI_MODEL matches", async () => {
+        const config: ServerModelsConfig = {
+            providers: [
+                {
+                    name: "OpenAI",
+                    provider: "openai",
+                    models: ["kimi-k2.6", "qwen3.6-plus"],
+                    default: true,
+                },
+                {
+                    name: "Gemini",
+                    provider: "google",
+                    models: ["gemini-3-flash-preview"],
+                },
+            ],
+        }
+        process.env.AI_PROVIDER = "google"
+        process.env.AI_MODEL = "gemini-3-flash-preview"
+        process.env.AI_MODELS_CONFIG = JSON.stringify(config)
+        process.env.AI_MODELS_CONFIG_PATH = ""
+
+        const models = await loadFlattenedServerModels()
+        const defaults = models.filter((model) => model.isDefault)
+
+        expect(defaults).toHaveLength(1)
+        expect(defaults[0]).toMatchObject({
+            id: "server:openai:kimi-k2.6",
+            provider: "openai",
+            modelId: "kimi-k2.6",
+        })
+    })
+
+    it("uses AI_MODEL as the default only when config has no explicit default", async () => {
+        const config: ServerModelsConfig = {
+            providers: [
+                {
+                    name: "OpenAI",
+                    provider: "openai",
+                    models: ["kimi-k2.6"],
+                },
+                {
+                    name: "Gemini",
+                    provider: "google",
+                    models: ["gemini-3-flash-preview"],
+                },
+            ],
+        }
+        process.env.AI_PROVIDER = "google"
+        process.env.AI_MODEL = "gemini-3-flash-preview"
+        process.env.AI_MODELS_CONFIG = JSON.stringify(config)
+        process.env.AI_MODELS_CONFIG_PATH = ""
+
+        const models = await loadFlattenedServerModels()
+        const defaults = models.filter((model) => model.isDefault)
+
+        expect(defaults).toHaveLength(1)
+        expect(defaults[0]).toMatchObject({
+            id: "server:gemini:gemini-3-flash-preview",
+            provider: "google",
+            modelId: "gemini-3-flash-preview",
+        })
+    })
+
+    it("marks only the first explicit default provider if several are configured", async () => {
+        const config: ServerModelsConfig = {
+            providers: [
+                {
+                    name: "OpenAI",
+                    provider: "openai",
+                    models: ["kimi-k2.6"],
+                    default: true,
+                },
+                {
+                    name: "Gemini",
+                    provider: "google",
+                    models: ["gemini-3-flash-preview"],
+                    default: true,
+                },
+            ],
+        }
+        process.env.AI_MODELS_CONFIG = JSON.stringify(config)
+        process.env.AI_MODELS_CONFIG_PATH = ""
+
+        const models = await loadFlattenedServerModels()
+        const defaults = models.filter((model) => model.isDefault)
+
+        expect(defaults).toHaveLength(1)
+        expect(defaults[0]?.id).toBe("server:openai:kimi-k2.6")
+    })
+
     it("preserves apiKeyEnv array in flattened models for load balancing", async () => {
         const config: ServerModelsConfig = {
             providers: [
