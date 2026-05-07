@@ -2,12 +2,14 @@
 
 import {
     BookmarkPlus,
+    Camera,
     Download,
     History,
     Image as ImageIcon,
     Link,
     Send,
     Square,
+    Upload,
 } from "lucide-react"
 import type React from "react"
 import {
@@ -26,7 +28,13 @@ import { HistoryDialog } from "@/components/history-dialog"
 import { ModelSelector } from "@/components/model-selector"
 import { SaveDialog } from "@/components/save-dialog"
 
-import { Button } from "@/components/ui/button"
+import { Button, buttonVariants } from "@/components/ui/button"
+import {
+    Popover,
+    PopoverContent,
+    PopoverTrigger,
+} from "@/components/ui/popover"
+import { Switch } from "@/components/ui/switch"
 import { Textarea } from "@/components/ui/textarea"
 import { UrlInputDialog } from "@/components/url-input-dialog"
 import { useDiagram } from "@/contexts/diagram-context"
@@ -36,7 +44,7 @@ import { isPdfFile, isTextFile } from "@/lib/pdf-utils"
 import { STORAGE_KEYS } from "@/lib/storage"
 import type { FlattenedModel } from "@/lib/types/model-config"
 import { extractUrlContent, type UrlData } from "@/lib/url-utils"
-import { isRealDiagram } from "@/lib/utils"
+import { cn, isRealDiagram } from "@/lib/utils"
 import { FilePreviewList } from "./file-preview-list"
 
 const MAX_IMAGE_SIZE = 2 * 1024 * 1024 // 2MB
@@ -174,6 +182,8 @@ interface ChatInputProps {
     onModelSelect?: (modelId: string | undefined) => void
     onConfigureModels?: () => void
     showUnvalidatedModels?: boolean
+    autoScreenshotEnabled?: boolean
+    onAutoScreenshotChange?: (enabled: boolean) => void
     // Focus control props
     shouldFocus?: boolean
     onFocused?: () => void
@@ -199,6 +209,8 @@ export const ChatInput = forwardRef<ChatInputRef, ChatInputProps>(
             onModelSelect = () => {},
             onConfigureModels,
             showUnvalidatedModels = false,
+            autoScreenshotEnabled = false,
+            onAutoScreenshotChange = () => {},
             shouldFocus = false,
             onFocused,
         },
@@ -239,6 +251,7 @@ export const ChatInput = forwardRef<ChatInputRef, ChatInputProps>(
         const [showHistory, setShowHistory] = useState(false)
         const [showUrlDialog, setShowUrlDialog] = useState(false)
         const [showSaveAsTemplate, setShowSaveAsTemplate] = useState(false)
+        const [showUploadMenu, setShowUploadMenu] = useState(false)
         const [isExtractingUrl, setIsExtractingUrl] = useState(false)
         const [sendShortcut, setSendShortcut] = useState("ctrl-enter")
         // Allow retry when there's an error (even if status is still "streaming" or "submitted")
@@ -358,6 +371,7 @@ export const ChatInput = forwardRef<ChatInputRef, ChatInputProps>(
         }
 
         const triggerFileInput = () => {
+            setShowUploadMenu(false)
             fileInputRef.current?.click()
         }
 
@@ -516,17 +530,71 @@ export const ChatInput = forwardRef<ChatInputRef, ChatInputProps>(
                                 <Download className="h-4 w-4" />
                             </ButtonWithTooltip>
 
-                            <ButtonWithTooltip
-                                type="button"
-                                variant="ghost"
-                                size="sm"
-                                onClick={triggerFileInput}
-                                disabled={isDisabled}
-                                tooltipContent={dict.chat.uploadFile}
-                                className="h-8 w-8 p-0 text-muted-foreground hover:text-foreground"
+                            <Popover
+                                open={showUploadMenu}
+                                onOpenChange={setShowUploadMenu}
                             >
-                                <ImageIcon className="h-4 w-4" />
-                            </ButtonWithTooltip>
+                                <PopoverTrigger asChild>
+                                    <button
+                                        type="button"
+                                        disabled={isDisabled}
+                                        aria-label={dict.chat.uploadFile}
+                                        data-testid="upload-menu-button"
+                                        title={dict.chat.uploadFile}
+                                        className={cn(
+                                            buttonVariants({
+                                                variant: "ghost",
+                                                size: "sm",
+                                            }),
+                                            "h-8 w-8 p-0 hover:text-foreground",
+                                            autoScreenshotEnabled
+                                                ? "text-primary bg-primary/10"
+                                                : "text-muted-foreground",
+                                        )}
+                                    >
+                                        <ImageIcon className="h-4 w-4" />
+                                    </button>
+                                </PopoverTrigger>
+                                <PopoverContent
+                                    align="start"
+                                    side="top"
+                                    data-testid="upload-menu"
+                                    className="w-64 p-2"
+                                >
+                                    <div className="flex flex-col gap-1">
+                                        <Button
+                                            type="button"
+                                            variant="ghost"
+                                            size="sm"
+                                            onClick={triggerFileInput}
+                                            className="h-9 justify-start gap-2 px-2 text-sm"
+                                        >
+                                            <Upload className="h-4 w-4" />
+                                            {dict.chat.uploadFileAction}
+                                        </Button>
+                                        <div className="flex items-center justify-between gap-3 rounded-md px-2 py-2 hover:bg-accent">
+                                            <div className="flex min-w-0 items-center gap-2">
+                                                <Camera className="h-4 w-4 shrink-0 text-muted-foreground" />
+                                                <span className="truncate text-sm">
+                                                    {
+                                                        dict.chat
+                                                            .autoScreenshotMode
+                                                    }
+                                                </span>
+                                            </div>
+                                            <Switch
+                                                checked={autoScreenshotEnabled}
+                                                onCheckedChange={
+                                                    onAutoScreenshotChange
+                                                }
+                                                aria-label={
+                                                    dict.chat.autoScreenshotMode
+                                                }
+                                            />
+                                        </div>
+                                    </div>
+                                </PopoverContent>
+                            </Popover>
 
                             {onUrlChange && (
                                 <ButtonWithTooltip

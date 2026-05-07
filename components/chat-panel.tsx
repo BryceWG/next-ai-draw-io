@@ -125,6 +125,7 @@ export default function ChatPanel({
         clearDiagram,
         getThumbnailSvg,
         captureValidationPng,
+        captureViewportPng,
         diagramHistory,
         setDiagramHistory,
     } = useDiagram()
@@ -178,6 +179,7 @@ export default function ChatPanel({
     const [vlmValidationEnabled, setVlmValidationEnabled] = useState(false)
     const [customSystemMessage, setCustomSystemMessage] = useState("")
     const [shouldFocusInput, setShouldFocusInput] = useState(false)
+    const [autoScreenshotEnabled, setAutoScreenshotEnabled] = useState(false)
 
     // Restore input from sessionStorage on mount (when ChatPanel remounts due to key change)
     useEffect(() => {
@@ -200,6 +202,13 @@ export default function ChatPanel({
         const stored = localStorage.getItem(STORAGE_KEYS.customSystemMessage)
         if (stored !== null) {
             setCustomSystemMessage(stored)
+        }
+    }, [])
+
+    useEffect(() => {
+        const stored = localStorage.getItem(STORAGE_KEYS.autoScreenshotEnabled)
+        if (stored !== null) {
+            setAutoScreenshotEnabled(stored === "true")
         }
     }, [])
 
@@ -844,6 +853,19 @@ export default function ChatPanel({
                     urlData,
                 )
 
+                if (autoScreenshotEnabled) {
+                    const viewportPng = await captureViewportPng()
+                    if (viewportPng) {
+                        parts.push({
+                            type: "file",
+                            url: viewportPng,
+                            mediaType: "image/png",
+                        })
+                    } else {
+                        toast.error(dict.chat.autoScreenshotFailed)
+                    }
+                }
+
                 // Add the combined text as the first part
                 parts.unshift({ type: "text", text: userText })
 
@@ -1001,6 +1023,14 @@ export default function ChatPanel({
 
     const saveInputToSessionStorage = (input: string) => {
         sessionStorage.setItem(SESSION_STORAGE_INPUT_KEY, input)
+    }
+
+    const handleAutoScreenshotChange = (enabled: boolean) => {
+        setAutoScreenshotEnabled(enabled)
+        localStorage.setItem(
+            STORAGE_KEYS.autoScreenshotEnabled,
+            String(enabled),
+        )
     }
 
     // Helper functions for message actions (regenerate/edit)
@@ -1436,6 +1466,8 @@ export default function ChatPanel({
                     onModelSelect={modelConfig.setSelectedModelId}
                     onConfigureModels={() => setShowModelConfigDialog(true)}
                     showUnvalidatedModels={modelConfig.showUnvalidatedModels}
+                    autoScreenshotEnabled={autoScreenshotEnabled}
+                    onAutoScreenshotChange={handleAutoScreenshotChange}
                     shouldFocus={shouldFocusInput}
                     onFocused={() => setShouldFocusInput(false)}
                 />

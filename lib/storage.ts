@@ -24,6 +24,7 @@ export const STORAGE_KEYS = {
 
     // Chat input preferences
     sendShortcut: "next-ai-draw-io-send-shortcut",
+    autoScreenshotEnabled: "next-ai-draw-io-auto-screenshot-enabled",
 
     // Diagram validation
     vlmValidationEnabled: "next-ai-draw-io-vlm-validation-enabled",

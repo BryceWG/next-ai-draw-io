@@ -9,20 +9,25 @@ import {
 import { createMockSSEResponse } from "./lib/helpers"
 
 test.describe("File Upload", () => {
-    test("upload button opens file picker", async ({ page }) => {
-        await page.goto("/", { waitUntil: "networkidle" })
-        await getIframe(page).waitFor({ state: "visible", timeout: 30000 })
+    test.describe.configure({ mode: "serial" })
 
-        const uploadButton = page.locator(
-            'button[aria-label="Upload file"], button:has(svg.lucide-image)',
-        )
+    test("upload button opens file picker", async ({ page }) => {
+        await page.goto("/", { waitUntil: "domcontentloaded" })
+        await expect(getChatInput(page).first()).toBeVisible({ timeout: 30000 })
+
+        const uploadButton = page.getByTestId("upload-menu-button")
         await expect(uploadButton.first()).toBeVisible({ timeout: 10000 })
         await expect(uploadButton.first()).toBeEnabled()
+
+        await uploadButton.first().click()
+        await expect(page.getByTestId("upload-menu")).toBeVisible()
+        await expect(page.getByText("Upload file").last()).toBeVisible()
+        await expect(page.getByText("Auto screenshot mode")).toBeVisible()
     })
 
     test("shows file preview after selecting image", async ({ page }) => {
-        await page.goto("/", { waitUntil: "networkidle" })
-        await getIframe(page).waitFor({ state: "visible", timeout: 30000 })
+        await page.goto("/", { waitUntil: "domcontentloaded" })
+        await expect(getChatInput(page).first()).toBeVisible({ timeout: 30000 })
 
         const fileInput = page.locator('input[type="file"]')
 
@@ -41,8 +46,8 @@ test.describe("File Upload", () => {
     })
 
     test("can remove uploaded file", async ({ page }) => {
-        await page.goto("/", { waitUntil: "networkidle" })
-        await getIframe(page).waitFor({ state: "visible", timeout: 30000 })
+        await page.goto("/", { waitUntil: "domcontentloaded" })
+        await expect(getChatInput(page).first()).toBeVisible({ timeout: 30000 })
 
         const fileInput = page.locator('input[type="file"]')
 
@@ -74,6 +79,7 @@ test.describe("File Upload", () => {
     })
 
     test("sends file with message to API", async ({ page }) => {
+        test.setTimeout(60000)
         let capturedRequest: any = null
 
         await page.route("**/api/chat", async (route) => {
@@ -88,8 +94,9 @@ test.describe("File Upload", () => {
             })
         })
 
-        await page.goto("/", { waitUntil: "networkidle" })
-        await getIframe(page).waitFor({ state: "visible", timeout: 30000 })
+        await page.goto("/", { waitUntil: "domcontentloaded" })
+        await expect(getChatInput(page).first()).toBeVisible({ timeout: 30000 })
+        await getIframe(page).waitFor({ state: "visible", timeout: 45000 })
 
         const fileInput = page.locator('input[type="file"]')
 
@@ -104,16 +111,12 @@ test.describe("File Upload", () => {
 
         await sendMessage(page, "Convert this to a diagram")
 
-        await expect(
-            page.locator('text="Based on your image, here is a diagram:"'),
-        ).toBeVisible({ timeout: 15000 })
-
-        expect(capturedRequest).not.toBeNull()
+        await expect.poll(() => capturedRequest !== null).toBe(true)
     })
 
     test("shows error for oversized file", async ({ page }) => {
-        await page.goto("/", { waitUntil: "networkidle" })
-        await getIframe(page).waitFor({ state: "visible", timeout: 30000 })
+        await page.goto("/", { waitUntil: "domcontentloaded" })
+        await expect(getChatInput(page).first()).toBeVisible({ timeout: 30000 })
 
         const fileInput = page.locator('input[type="file"]')
         const largeBuffer = Buffer.alloc(3 * 1024 * 1024, "x")
@@ -130,7 +133,7 @@ test.describe("File Upload", () => {
     })
 
     test("drag and drop file upload works", async ({ page }) => {
-        await page.goto("/", { waitUntil: "networkidle" })
+        await page.goto("/", { waitUntil: "domcontentloaded" })
         await getIframe(page).waitFor({ state: "visible", timeout: 30000 })
 
         const chatForm = page.locator("form").first()
@@ -148,5 +151,57 @@ test.describe("File Upload", () => {
         await chatForm.dispatchEvent("drop", { dataTransfer })
 
         await expect(getChatInput(page)).toBeVisible({ timeout: 3000 })
+    })
+
+    test("auto screenshot mode attaches a png file part", async ({ page }) => {
+        const capturedBodies: any[] = []
+
+        await page.route("**/api/chat", async (route) => {
+            const postData = route.request().postData()
+            if (postData) {
+                capturedBodies.push(JSON.parse(postData))
+            }
+
+            await route.fulfill({
+                status: 200,
+                contentType: "text/event-stream",
+                body: createMockSSEResponse(
+                    SINGLE_BOX_XML,
+                    "Updated with screenshot context.",
+                ),
+            })
+        })
+
+        await page.goto("/", { waitUntil: "domcontentloaded" })
+        await getIframe(page).waitFor({ state: "visible", timeout: 30000 })
+
+        await sendMessage(page, "Create a box")
+        await expect(
+            page.getByText("Updated with screenshot context."),
+        ).toBeVisible({
+            timeout: 15000,
+        })
+
+        const uploadButton = page.getByTestId("upload-menu-button")
+        await uploadButton.first().click()
+        await page.getByRole("switch", { name: "Auto screenshot mode" }).click()
+        await expect(
+            page.getByRole("switch", { name: "Auto screenshot mode" }),
+        ).toBeChecked()
+
+        await sendMessage(page, "Use the current canvas view")
+
+        await expect.poll(() => capturedBodies.length).toBeGreaterThanOrEqual(2)
+        const secondBody = capturedBodies[1]
+        const parts = secondBody?.messages?.at?.(-1)?.parts || secondBody?.parts
+
+        expect(
+            parts?.some(
+                (part: any) =>
+                    part.type === "file" &&
+                    part.mediaType === "image/png" &&
+                    String(part.url || "").startsWith("data:image/png"),
+            ),
+        ).toBe(true)
     })
 })

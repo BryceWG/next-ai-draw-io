@@ -33,6 +33,7 @@ interface DiagramContextType {
     ) => void
     getThumbnailSvg: () => Promise<string | null>
     captureValidationPng: () => Promise<string | null>
+    captureViewportPng: () => Promise<string | null>
     isDrawioReady: boolean
     onDrawioLoad: () => void
     resetDrawioReady: () => void
@@ -41,6 +42,23 @@ interface DiagramContextType {
 }
 
 const DiagramContext = createContext<DiagramContextType | undefined>(undefined)
+
+interface PagePosition {
+    x: number
+    y: number
+    width: number
+    height: number
+}
+
+interface ViewportSnapshot {
+    bounds?: PagePosition
+    page?: PagePosition
+    scale?: number
+    translate?: {
+        x: number
+        y: number
+    }
+}
 
 export function DiagramProvider({ children }: { children: React.ReactNode }) {
     const [chartXML, setChartXML] = useState<string>("")
@@ -55,6 +73,11 @@ export function DiagramProvider({ children }: { children: React.ReactNode }) {
     const resolverRef = useRef<((value: string) => void) | null>(null)
     // Resolver for PNG export (used for VLM validation)
     const pngResolverRef = useRef<((value: string) => void) | null>(null)
+    // Resolver for PNG export (used for auto screenshot mode)
+    const viewportPngResolverRef = useRef<((value: string) => void) | null>(
+        null,
+    )
+    const viewportSnapshotRef = useRef<ViewportSnapshot | null>(null)
     // Track if we're expecting an export for history (user-initiated)
     const expectHistoryExportRef = useRef<boolean>(false)
     // Track latest chartXML for restoration after remount
@@ -166,6 +189,134 @@ export function DiagramProvider({ children }: { children: React.ReactNode }) {
         }
     }
 
+    const cropPngToViewport = async (
+        pngData: string,
+        snapshot: ViewportSnapshot,
+    ): Promise<string | null> => {
+        const bounds = snapshot.bounds || snapshot.page
+        const scale = snapshot.scale || 1
+        const translate = snapshot.translate
+
+        if (!bounds || !translate || scale <= 0) {
+            return pngData
+        }
+
+        const iframe = document.querySelector<HTMLIFrameElement>(
+            "iframe.diagrams-iframe",
+        )
+        const viewportRect = iframe?.getBoundingClientRect()
+        if (
+            !viewportRect ||
+            viewportRect.width <= 0 ||
+            viewportRect.height <= 0
+        ) {
+            return pngData
+        }
+
+        const image = new window.Image()
+        const loaded = new Promise<void>((resolve, reject) => {
+            image.onload = () => resolve()
+            image.onerror = () => reject(new Error("Failed to load PNG export"))
+        })
+        image.src = pngData
+        await loaded
+
+        if (image.naturalWidth <= 0 || image.naturalHeight <= 0) {
+            return null
+        }
+
+        const exportedScaleX = image.naturalWidth / bounds.width
+        const exportedScaleY = image.naturalHeight / bounds.height
+
+        const visibleGraphBounds = {
+            x: -translate.x,
+            y: -translate.y,
+            width: viewportRect.width / scale,
+            height: viewportRect.height / scale,
+        }
+
+        const cropX = Math.max(
+            0,
+            Math.round((visibleGraphBounds.x - bounds.x) * exportedScaleX),
+        )
+        const cropY = Math.max(
+            0,
+            Math.round((visibleGraphBounds.y - bounds.y) * exportedScaleY),
+        )
+        const cropWidth = Math.min(
+            image.naturalWidth - cropX,
+            Math.round(visibleGraphBounds.width * exportedScaleX),
+        )
+        const cropHeight = Math.min(
+            image.naturalHeight - cropY,
+            Math.round(visibleGraphBounds.height * exportedScaleY),
+        )
+
+        if (cropWidth <= 0 || cropHeight <= 0) {
+            return pngData
+        }
+
+        const canvas = document.createElement("canvas")
+        canvas.width = cropWidth
+        canvas.height = cropHeight
+
+        const ctx = canvas.getContext("2d")
+        if (!ctx) return pngData
+
+        ctx.drawImage(
+            image,
+            cropX,
+            cropY,
+            cropWidth,
+            cropHeight,
+            0,
+            0,
+            cropWidth,
+            cropHeight,
+        )
+
+        return canvas.toDataURL("image/png")
+    }
+
+    // Capture current visible diagram viewport as PNG for auto screenshot mode.
+    const captureViewportPng = async (): Promise<string | null> => {
+        if (!drawioRef.current) return null
+        if (!isRealDiagram(chartXML)) return null
+
+        try {
+            const pngData = await Promise.race([
+                new Promise<string>((resolve) => {
+                    viewportPngResolverRef.current = resolve
+                    drawioRef.current?.exportDiagram({
+                        format: "png",
+                        currentPage: true,
+                    })
+                }),
+                new Promise<string>((_, reject) =>
+                    setTimeout(
+                        () =>
+                            reject(new Error("Viewport PNG export timed out")),
+                        5000,
+                    ),
+                ),
+            ])
+
+            if (!pngData?.startsWith("data:image/png")) {
+                return null
+            }
+
+            const snapshot = viewportSnapshotRef.current
+            if (!snapshot) {
+                return pngData
+            }
+
+            return await cropPngToViewport(pngData, snapshot)
+        } catch {
+            viewportPngResolverRef.current = null
+            return null
+        }
+    }
+
     const loadDiagram = (
         chart: string,
         skipValidation?: boolean,
@@ -205,6 +356,16 @@ export function DiagramProvider({ children }: { children: React.ReactNode }) {
     }
 
     const handleDiagramExport = (data: any) => {
+        // Handle PNG export for auto screenshot mode
+        if (
+            viewportPngResolverRef.current &&
+            data.data?.startsWith("data:image/png")
+        ) {
+            viewportPngResolverRef.current(data.data)
+            viewportPngResolverRef.current = null
+            return
+        }
+
         // Handle PNG export for VLM validation
         if (pngResolverRef.current && data.data?.startsWith("data:image/png")) {
             pngResolverRef.current(data.data)
@@ -255,6 +416,13 @@ export function DiagramProvider({ children }: { children: React.ReactNode }) {
 
     const handleDiagramAutoSave = (data: { xml?: string }) => {
         if (!data?.xml) return
+        viewportSnapshotRef.current = {
+            bounds: (data as { bounds?: PagePosition }).bounds,
+            page: (data as { page?: PagePosition }).page,
+            scale: (data as { scale?: number }).scale,
+            translate: (data as { translate?: { x: number; y: number } })
+                .translate,
+        }
         // Don't overwrite a pending restore - if we have a real diagram in state
         // but DrawIO isn't ready yet, it means we're waiting to restore
         if (!isDrawioReady && isRealDiagram(chartXML)) {
@@ -398,6 +566,7 @@ export function DiagramProvider({ children }: { children: React.ReactNode }) {
                 saveDiagramToFile,
                 getThumbnailSvg,
                 captureValidationPng,
+                captureViewportPng,
                 isDrawioReady,
                 onDrawioLoad,
                 resetDrawioReady,
