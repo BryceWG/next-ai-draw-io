@@ -5,9 +5,12 @@ import path from "path"
 import { afterEach, beforeEach, describe, expect, it } from "vitest"
 import { createEmptySession } from "@/lib/session-storage"
 import {
+    countSessionsForUser,
     deleteOwnedSession,
+    deleteTeamDataForUser,
     getModelConfigForUser,
     getSessionById,
+    hasModelConfigForUser,
     listSessionMetadataForUser,
     saveModelConfigForUser,
     saveSessionForUser,
@@ -83,6 +86,38 @@ describe("team session store", () => {
         await expect(
             deleteOwnedSession("owned-session", "alice"),
         ).resolves.toBe("deleted")
+    })
+
+    it("counts and deletes data for a removed team user", async () => {
+        await saveSessionForUser(
+            {
+                ...createEmptySession(),
+                id: "alice-session",
+            },
+            "alice",
+        )
+        await saveSessionForUser(
+            {
+                ...createEmptySession(),
+                id: "bob-session",
+            },
+            "bob",
+        )
+        const config = createEmptyConfig()
+        config.providers = [createProviderConfig("openai")]
+        await saveModelConfigForUser("alice", config)
+
+        await expect(countSessionsForUser("alice")).resolves.toBe(1)
+        await expect(hasModelConfigForUser("alice")).resolves.toBe(true)
+
+        await deleteTeamDataForUser("alice")
+
+        await expect(countSessionsForUser("alice")).resolves.toBe(0)
+        await expect(hasModelConfigForUser("alice")).resolves.toBe(false)
+        await expect(getSessionById("alice-session")).resolves.toBeNull()
+        await expect(getSessionById("bob-session")).resolves.toMatchObject({
+            id: "bob-session",
+        })
     })
 })
 

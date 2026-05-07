@@ -9,7 +9,7 @@ import {
 export const runtime = "nodejs"
 
 export async function POST(req: Request) {
-    if (!isTeamRegistrationEnabled()) {
+    if (!(await isTeamRegistrationEnabled())) {
         return NextResponse.json(
             { error: "Registration is disabled" },
             { status: 404 },
@@ -27,7 +27,12 @@ export async function POST(req: Request) {
         const response = NextResponse.json({
             authenticated: true,
             authEnabled: true,
-            user: { id: user.id, name: user.name },
+            user: {
+                id: user.id,
+                name: user.name,
+                role: user.role,
+                isAdmin: user.role === "admin",
+            },
         })
         response.cookies.set(cookie.name, cookie.value, {
             httpOnly: true,

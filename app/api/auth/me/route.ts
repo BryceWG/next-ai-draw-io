@@ -12,12 +12,14 @@ export async function GET(req: Request) {
         const user = await getUserFromRequest(req)
         return NextResponse.json({
             authEnabled: isTeamAuthEnabled(),
-            registrationEnabled: isTeamRegistrationEnabled(),
+            registrationEnabled: await isTeamRegistrationEnabled(),
             authenticated: !!user,
             user: user
                 ? {
                       id: user.id,
                       name: user.name,
+                      role: user.role,
+                      isAdmin: user.isAdmin,
                   }
                 : null,
         })
@@ -26,7 +28,7 @@ export async function GET(req: Request) {
         return NextResponse.json(
             {
                 authEnabled: isTeamAuthEnabled(),
-                registrationEnabled: isTeamRegistrationEnabled(),
+                registrationEnabled: await isTeamRegistrationEnabled(),
                 authenticated: false,
             },
             { status: 500 },

@@ -40,7 +40,11 @@ export async function POST(req: Request) {
     try {
         const users = await loadTeamUsers()
         const user = users.find((candidate) => candidate.id === userId)
-        if (!user || !(await verifyPasswordHash(password, user.passwordHash))) {
+        if (
+            !user ||
+            user.disabled === true ||
+            !(await verifyPasswordHash(password, user.passwordHash))
+        ) {
             return NextResponse.json(
                 { error: "Invalid user ID or password" },
                 { status: 401 },
@@ -51,7 +55,12 @@ export async function POST(req: Request) {
         const response = NextResponse.json({
             authenticated: true,
             authEnabled: true,
-            user: { id: user.id, name: user.name },
+            user: {
+                id: user.id,
+                name: user.name,
+                role: user.role,
+                isAdmin: user.role === "admin",
+            },
         })
         response.cookies.set(cookie.name, cookie.value, {
             httpOnly: true,

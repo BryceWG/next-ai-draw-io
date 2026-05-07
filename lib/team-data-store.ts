@@ -177,6 +177,12 @@ export async function deleteOwnedSession(
     })
 }
 
+export async function countSessionsForUser(userId: string): Promise<number> {
+    const data = await readJsonFile(sessionsFilePath(), defaultSessionsFile())
+    return data.sessions.filter((record) => record.ownerUserId === userId)
+        .length
+}
+
 export async function getModelConfigForUser(
     userId: string,
 ): Promise<MultiModelConfig> {
@@ -199,5 +205,46 @@ export async function saveModelConfigForUser(
         data.configs[userId] = config
         await writeJsonFile(modelConfigsFilePath(), data)
         return config
+    })
+}
+
+export async function hasModelConfigForUser(userId: string): Promise<boolean> {
+    const data = await readJsonFile(
+        modelConfigsFilePath(),
+        defaultModelConfigsFile(),
+    )
+    return !!data.configs[userId]
+}
+
+export async function deleteTeamDataForUser(userId: string): Promise<void> {
+    await withFileLock(sessionsFilePath(), async () => {
+        const data = await readJsonFile(
+            sessionsFilePath(),
+            defaultSessionsFile(),
+        )
+        const filteredSessions = data.sessions.filter(
+            (record) => record.ownerUserId !== userId,
+        )
+        if (filteredSessions.length !== data.sessions.length) {
+            await writeJsonFile(sessionsFilePath(), {
+                ...data,
+                sessions: filteredSessions,
+            })
+        }
+    })
+
+    await withFileLock(modelConfigsFilePath(), async () => {
+        const data = await readJsonFile(
+            modelConfigsFilePath(),
+            defaultModelConfigsFile(),
+        )
+        if (data.configs[userId]) {
+            const configs = { ...data.configs }
+            delete configs[userId]
+            await writeJsonFile(modelConfigsFilePath(), {
+                ...data,
+                configs,
+            })
+        }
     })
 }
